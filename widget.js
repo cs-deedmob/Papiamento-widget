@@ -1,6 +1,6 @@
 (function () {
   // ─── CONFIG ────────────────────────────────────────────────────────────────
-  const GEMINI_API_KEY = "YOUR_API_KEY_HERE"; // ← swap this out later
+  const GEMINI_API_KEY = "AIzaSyDwN13WOE6B3nTRosnJF0OMW1X3hxZIDkc"; // ← swap this out later
   const GEMINI_URL =
     "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=" +
     GEMINI_API_KEY;
