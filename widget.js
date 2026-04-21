@@ -153,6 +153,32 @@
     return chunks;
   }
 
+  // ─── CACHE ─────────────────────────────────────────────────────────────────
+  const CACHE_KEY = "pap_cache_" + window.location.pathname;
+
+  function saveToCache(texts, translated) {
+    try {
+      sessionStorage.setItem(CACHE_KEY, JSON.stringify({ texts, translated }));
+    } catch (e) {
+      console.warn("[Papiamento widget] Cache save failed:", e);
+    }
+  }
+
+  function loadFromCache(texts) {
+    try {
+      const raw = sessionStorage.getItem(CACHE_KEY);
+      if (!raw) return null;
+      const cached = JSON.parse(raw);
+      // Only use cache if the page text matches what was translated before
+      if (JSON.stringify(cached.texts) === JSON.stringify(texts)) {
+        return cached.translated;
+      }
+    } catch (e) {
+      console.warn("[Papiamento widget] Cache load failed:", e);
+    }
+    return null;
+  }
+
   // Send a batch of strings to Gemini, get back translated strings
   async function translateBatch(texts) {
     const prompt = `You are a Papiamento translator. Translate the following texts to Papiamento (the Aruban variant). 
@@ -187,7 +213,6 @@ ${JSON.stringify(texts)}`;
     isTranslating = true;
     btn.classList.add("loading");
     setStatus("Traduciendo...");
-    showToast("🔄 Traduciendo pagina na Papiamento...", 8000);
 
     try {
       const nodes = getTextNodes();
@@ -198,12 +223,23 @@ ${JSON.stringify(texts)}`;
       });
 
       const texts = nodes.map((n) => n.textContent.trim());
-      const batches = chunk(texts, 40); // 40 strings per API call
-      const translated = [];
 
-      for (const batch of batches) {
-        const result = await translateBatch(batch);
-        translated.push(...result);
+      // Check cache first
+      let translated = loadFromCache(texts);
+
+      if (translated) {
+        // Cache hit — apply instantly, no API call needed
+        showToast("⚡ Carga for di cache!", 3000);
+      } else {
+        // Cache miss — call Gemini
+        showToast("🔄 Traduciendo pagina na Papiamento...", 8000);
+        const batches = chunk(texts, 40);
+        translated = [];
+        for (const batch of batches) {
+          const result = await translateBatch(batch);
+          translated.push(...result);
+        }
+        saveToCache(texts, translated);
       }
 
       // Apply translations
