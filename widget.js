@@ -1,16 +1,17 @@
 (function () {
+  function init() {
   // ─── CONFIG ────────────────────────────────────────────────────────────────
   const GEMINI_API_KEY = "AIzaSyDwN13WOE6B3nTRosnJF0OMW1X3hxZIDkc"; // ← swap this out later
   const GEMINI_URL =
     "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=" +
     GEMINI_API_KEY;
- 
+
   // ─── STATE ─────────────────────────────────────────────────────────────────
   let isTranslated = false;
   let originalTexts = new Map(); // node → original text
   let observer = null;
   let isTranslating = false;
- 
+
   // ─── STYLE ─────────────────────────────────────────────────────────────────
   const style = document.createElement("style");
   style.textContent = `
@@ -22,7 +23,7 @@
       font-family: system-ui, sans-serif;
       font-size: 14px;
     }
- 
+
     #pap-btn {
       display: flex;
       align-items: center;
@@ -37,37 +38,37 @@
       transition: background 0.2s, transform 0.15s;
       white-space: nowrap;
     }
- 
+
     #pap-btn:hover {
       background: #16213e;
       transform: translateY(-1px);
     }
- 
+
     #pap-btn .pap-flag {
       font-size: 18px;
       line-height: 1;
     }
- 
+
     #pap-btn .pap-label {
       font-weight: 600;
       letter-spacing: 0.01em;
     }
- 
+
     #pap-btn .pap-status {
       font-size: 11px;
       opacity: 0.7;
       font-weight: 400;
     }
- 
+
     #pap-btn.active {
       background: #0f3460;
     }
- 
+
     #pap-btn.loading {
       opacity: 0.75;
       cursor: wait;
     }
- 
+
     #pap-toast {
       position: fixed;
       bottom: 80px;
@@ -85,18 +86,18 @@
       font-family: system-ui, sans-serif;
       max-width: 240px;
     }
- 
+
     #pap-toast.show {
       opacity: 1;
       transform: translateY(0);
     }
   `;
   document.head.appendChild(style);
- 
+
   // ─── UI ────────────────────────────────────────────────────────────────────
   const widget = document.createElement("div");
   widget.id = "pap-widget";
- 
+
   const btn = document.createElement("button");
   btn.id = "pap-btn";
   btn.innerHTML = `
@@ -106,22 +107,22 @@
   `;
   widget.appendChild(btn);
   document.body.appendChild(widget);
- 
+
   const toast = document.createElement("div");
   toast.id = "pap-toast";
   document.body.appendChild(toast);
- 
+
   // ─── HELPERS ───────────────────────────────────────────────────────────────
   function showToast(msg, duration = 3000) {
     toast.textContent = msg;
     toast.classList.add("show");
     setTimeout(() => toast.classList.remove("show"), duration);
   }
- 
+
   function setStatus(text) {
     document.getElementById("pap-status").textContent = text;
   }
- 
+
   // Collect all visible text nodes that are worth translating
   function getTextNodes(root) {
     const skip = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEXTAREA", "INPUT", "CODE", "PRE"]);
@@ -144,23 +145,23 @@
     while ((node = walker.nextNode())) nodes.push(node);
     return nodes;
   }
- 
+
   // Split array into chunks for batched API calls
   function chunk(arr, size) {
     const chunks = [];
     for (let i = 0; i < arr.length; i += size) chunks.push(arr.slice(i, i + size));
     return chunks;
   }
- 
+
   // Send a batch of strings to Gemini, get back translated strings
   async function translateBatch(texts) {
     const prompt = `You are a Papiamento translator. Translate the following texts to Papiamento (the Aruban variant). 
 Return ONLY a JSON array of translated strings, in the same order, with no explanation or extra text.
 If a text is already in Papiamento or is a proper noun/name, return it unchanged.
- 
+
 Texts:
 ${JSON.stringify(texts)}`;
- 
+
     const res = await fetch(GEMINI_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -169,17 +170,17 @@ ${JSON.stringify(texts)}`;
         generationConfig: { temperature: 0.1 },
       }),
     });
- 
+
     if (!res.ok) throw new Error("Gemini API error: " + res.status);
- 
+
     const data = await res.json();
     const raw = data.candidates?.[0]?.content?.parts?.[0]?.text || "[]";
- 
+
     // Strip markdown code fences if Gemini wraps the JSON
     const clean = raw.replace(/```json\n?|\n?```/g, "").trim();
     return JSON.parse(clean);
   }
- 
+
   // ─── TRANSLATE ─────────────────────────────────────────────────────────────
   async function translatePage() {
     if (isTranslating) return;
@@ -187,35 +188,35 @@ ${JSON.stringify(texts)}`;
     btn.classList.add("loading");
     setStatus("Traduciendo...");
     showToast("🔄 Traduciendo pagina na Papiamento...", 8000);
- 
+
     try {
       const nodes = getTextNodes();
- 
+
       // Save originals
       nodes.forEach((node) => {
         if (!originalTexts.has(node)) originalTexts.set(node, node.textContent);
       });
- 
+
       const texts = nodes.map((n) => n.textContent.trim());
       const batches = chunk(texts, 40); // 40 strings per API call
       const translated = [];
- 
+
       for (const batch of batches) {
         const result = await translateBatch(batch);
         translated.push(...result);
       }
- 
+
       // Apply translations
       nodes.forEach((node, i) => {
         if (translated[i]) node.textContent = translated[i];
       });
- 
+
       isTranslated = true;
       btn.classList.add("active");
       btn.classList.remove("loading");
       setStatus("PAP ✓");
       showToast("✅ Pagina a wordo tradusi na Papiamento!", 4000);
- 
+
       // Watch for new content (infinite scroll, modals, etc.)
       startObserver();
     } catch (err) {
@@ -224,10 +225,10 @@ ${JSON.stringify(texts)}`;
       showToast("❌ Error: " + err.message, 5000);
       console.error("[Papiamento widget]", err);
     }
- 
+
     isTranslating = false;
   }
- 
+
   // ─── RESTORE ───────────────────────────────────────────────────────────────
   function restorePage() {
     stopObserver();
@@ -240,7 +241,7 @@ ${JSON.stringify(texts)}`;
     setStatus("EN → PAP");
     showToast("↩️ Teksto original a wordo restore.", 3000);
   }
- 
+
   // ─── MUTATION OBSERVER (handles dynamic content) ───────────────────────────
   function startObserver() {
     if (observer) return;
@@ -255,11 +256,11 @@ ${JSON.stringify(texts)}`;
         }
       }
       if (newNodes.length === 0) return;
- 
+
       // Only translate nodes we haven't seen before
       const fresh = newNodes.filter((n) => !originalTexts.has(n));
       if (fresh.length === 0) return;
- 
+
       isTranslating = true;
       try {
         const texts = fresh.map((n) => n.textContent.trim());
@@ -278,17 +279,17 @@ ${JSON.stringify(texts)}`;
       }
       isTranslating = false;
     });
- 
+
     observer.observe(document.body, { childList: true, subtree: true });
   }
- 
+
   function stopObserver() {
     if (observer) {
       observer.disconnect();
       observer = null;
     }
   }
- 
+
   // ─── TOGGLE ────────────────────────────────────────────────────────────────
   btn.addEventListener("click", () => {
     if (isTranslated) {
@@ -297,4 +298,11 @@ ${JSON.stringify(texts)}`;
       translatePage();
     }
   });
+  } // end init()
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
 })();
