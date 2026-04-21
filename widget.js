@@ -300,9 +300,11 @@ ${JSON.stringify(texts)}`;
   });
   } // end init()
 
-  if (document.readyState === "loading") {
+  if (document.body) {
+    init();
+  } else if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", init);
   } else {
-    init();
+    window.addEventListener("load", init);
   }
 })();
